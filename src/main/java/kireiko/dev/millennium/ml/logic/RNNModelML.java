@@ -2,7 +2,7 @@ package kireiko.dev.millennium.ml.logic;
 
 import kireiko.dev.millennium.ml.data.ObjectML;
 import kireiko.dev.millennium.ml.data.ResultML;
-import kireiko.dev.millennium.ml.logic.rnn.*;
+import kireiko.dev.millennium.ml.logic.rnn.RNNConfig;
 import kireiko.dev.millennium.ml.logic.rnn.data.SequenceData;
 import kireiko.dev.millennium.ml.logic.rnn.data.preprocessing.RawSequencePreprocessor;
 import kireiko.dev.millennium.ml.logic.rnn.data.preprocessing.SequencePreprocessor;
@@ -15,11 +15,7 @@ import kireiko.dev.millennium.ml.logic.rnn.pooling.*;
 import kireiko.dev.millennium.ml.logic.rnn.util.ModelIO;
 import kireiko.dev.millennium.vectors.Pair;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.InputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -90,6 +86,7 @@ public final class RNNModelML implements Millennium {
 
     private double headBiasGrad;
     private double attnBGrad;
+    private double decisionThreshold = CHECKPOINT_DECISION_THRESHOLD;
 
     public RNNModelML(int inputSize, int hiddenSize) {
         this(RNNConfig.builder().inputSize(inputSize).hiddenSize(hiddenSize).build());
@@ -177,6 +174,8 @@ public final class RNNModelML implements Millennium {
     public void setGradientClip(double v) { cfg.gradientClip = v; }
     public void setLabelSmoothing(double v) { cfg.labelSmoothing = v; }
     public void setBatchSize(int v) { this.batchSize = Math.max(1, v); }
+    public void setDecisionThreshold(double v) { this.decisionThreshold = Math.max(0.0, Math.min(1.0, v)); }
+    public double getDecisionThreshold() { return decisionThreshold; }
 
     public void setInputMode(InputMode mode) {
         cfg.inputMode = mode;
@@ -461,6 +460,7 @@ public final class RNNModelML implements Millennium {
 
             ModelIO.writeArr(out, head.V);
             out.writeDouble(head.bias);
+            out.writeDouble(decisionThreshold);
         } catch (Exception ignored) {}
     }
 
@@ -508,6 +508,11 @@ public final class RNNModelML implements Millennium {
 
             readInto(dis, head.V);
             head.bias = dis.readDouble();
+            try {
+                decisionThreshold = Math.max(0.0, Math.min(1.0, dis.readDouble()));
+            } catch (EOFException ignored) {
+                decisionThreshold = CHECKPOINT_DECISION_THRESHOLD;
+            }
         } catch (Exception ignored) {}
     }
 
@@ -994,7 +999,7 @@ public final class RNNModelML implements Millennium {
         if (dataset == null || dataset.isEmpty() || epochs <= 0) return;
         int bs = Math.max(1, batchSize);
         double labelSmoothing = cfg.labelSmoothing;
-        double decisionThreshold = CHECKPOINT_DECISION_THRESHOLD;
+        double decisionThreshold = this.decisionThreshold;
         TrainingSnapshot bestSnapshot = null;
         int bestEpoch = -1;
         double bestPrAuc = Double.NEGATIVE_INFINITY;
@@ -1019,8 +1024,8 @@ public final class RNNModelML implements Millennium {
 
         List<Pair<List<ObjectML>, Boolean>> trainSet = new ArrayList<>(shuffled.subList(0, splitIndex));
         List<Pair<List<ObjectML>, Boolean>> validSet = splitIndex < total
-                ? new ArrayList<>(shuffled.subList(splitIndex, total))
-                : java.util.Collections.emptyList();
+                        ? new ArrayList<>(shuffled.subList(splitIndex, total))
+                        : java.util.Collections.emptyList();
 
         Logger.info("Dataset split: " + trainSet.size() + " training samples, " + validSet.size() + " validation samples.");
 
@@ -1073,17 +1078,17 @@ public final class RNNModelML implements Millennium {
             double prAuc = prAuc(validMetrics.pairs);
 
             Logger.info(String.format("Epoch %d/%d | Train [Loss: %.4f, Acc: %.1f%%] | Valid [Loss: %.4f, Acc: %.1f%%]",
-                    (e + 1), epochs, avgTrainLoss, avgTrainAcc, avgValidLoss, acc));
+                            (e + 1), epochs, avgTrainLoss, avgTrainAcc, avgValidLoss, acc));
             if (trainMetrics.skippedInvalidOrNonFinite > 0 || validMetrics.skippedInvalidOrNonFinite > 0) {
                 Logger.warn(String.format(
-                        "Skipped samples -> train invalid/non-finite: %d, validation invalid/non-finite: %d",
-                        trainMetrics.skippedInvalidOrNonFinite, validMetrics.skippedInvalidOrNonFinite));
+                                "Skipped samples -> train invalid/non-finite: %d, validation invalid/non-finite: %d",
+                                trainMetrics.skippedInvalidOrNonFinite, validMetrics.skippedInvalidOrNonFinite));
             }
             Logger.info(String.format("Validation Metrics -> Precision: %.4f | Recall: %.4f | F1: %.4f | FPR: %.4f",
-                    precision, recall, f1, fpr));
+                            precision, recall, f1, fpr));
             Logger.info(String.format("Advanced Metrics -> ROC-AUC: %.4f | PR-AUC: %.4f", rocAuc, prAuc));
             Logger.info(String.format("Confusion Matrix -> TP: %d | TN: %d | FP: %d | FN: %d",
-                    validMetrics.tp, validMetrics.tn, validMetrics.fp, validMetrics.fn));
+                            validMetrics.tp, validMetrics.tn, validMetrics.fp, validMetrics.fn));
             Logger.info(String.format("Decision Threshold -> %.2f", decisionThreshold));
 
             boolean betterF1 = f1 > bestF1 + 1e-12;
@@ -1104,16 +1109,16 @@ public final class RNNModelML implements Millennium {
                 bestValidLoss = avgValidLoss;
                 bestValidAcc = acc;
                 Logger.info(String.format(
-                        "Best checkpoint -> epoch %d selected (thr: %.2f | F1: %.4f | FPR: %.4f | Recall: %.4f | PR-AUC: %.4f | Valid Loss: %.4f)",
-                        bestEpoch, decisionThreshold, bestF1, bestFpr, bestRecall, bestPrAuc, bestValidLoss));
+                                "Best checkpoint -> epoch %d selected (thr: %.2f | F1: %.4f | FPR: %.4f | Recall: %.4f | PR-AUC: %.4f | Valid Loss: %.4f)",
+                                bestEpoch, decisionThreshold, bestF1, bestFpr, bestRecall, bestPrAuc, bestValidLoss));
             }
         }
 
         if (bestSnapshot != null) {
             restoreTrainingSnapshot(bestSnapshot);
             Logger.info(String.format(
-                    "Best epoch restored -> %d/%d (thr: %.2f | F1: %.4f | FPR: %.4f | Recall: %.4f | PR-AUC: %.4f | ROC-AUC: %.4f | Valid Acc: %.1f%% | Valid Loss: %.4f)",
-                    bestEpoch, epochs, decisionThreshold, bestF1, bestFpr, bestRecall, bestPrAuc, bestRocAuc, bestValidAcc, bestValidLoss));
+                            "Best epoch restored -> %d/%d (thr: %.2f | F1: %.4f | FPR: %.4f | Recall: %.4f | PR-AUC: %.4f | ROC-AUC: %.4f | Valid Acc: %.1f%% | Valid Loss: %.4f)",
+                            bestEpoch, epochs, decisionThreshold, bestF1, bestFpr, bestRecall, bestPrAuc, bestRocAuc, bestValidAcc, bestValidLoss));
         }
     }
 }

@@ -23,7 +23,7 @@ public final class UseEntityListener extends PacketAdapter {
     private static final boolean modern = VersionUtil.is1_13orAbove();
 
     public UseEntityListener() {
-        super(MX.getInstance(), ListenerPriority.HIGHEST, Collections.singletonList(PacketType.Play.Client.USE_ENTITY));
+        super(MX.getInstance(), ListenerPriority.HIGHEST, Collections.singletonList(PacketType.Play.Client.USE_ENTITY), ListenerOptions.SYNC);
     }
 
     @SneakyThrows

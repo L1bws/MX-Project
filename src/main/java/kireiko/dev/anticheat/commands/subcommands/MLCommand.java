@@ -98,6 +98,10 @@ public final class MLCommand extends MXSubCommand {
                     rnn.setLabelSmoothing(Double.parseDouble(value));
                     sender.sendMessage("§a[ML #" + index + "] labelSmoothing -> " + value);
                     break;
+                case "th":
+                    rnn.setDecisionThreshold(Double.parseDouble(value));
+                    sender.sendMessage("§a[ML #" + index + "] decisionThreshold -> " + String.format("%.2f", rnn.getDecisionThreshold()));
+                    break;
                 case "im":
                     rnn.setInputMode(InputMode.valueOf(value.toUpperCase()));
                     sender.sendMessage("§a[ML #" + index + "] inputMode -> " + value.toUpperCase());
