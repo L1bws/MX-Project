@@ -29,7 +29,7 @@ public final class MLCommand extends MXSubCommand {
 
     @Override
     public String getUsage() {
-        return "/" + MX.command + " ml <index> <param> <value> (Params: lr, dr, rdr, wd, gc, ls, im, pm)";
+        return "/" + MX.command + " ml <index> <param> <value> (Params: lr, dr, rdr, wd, gc, ls, th, im, pm)";
     }
 
     @Override
