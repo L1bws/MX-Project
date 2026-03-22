@@ -29,7 +29,7 @@ public final class MLCommand extends MXSubCommand {
 
     @Override
     public String getUsage() {
-        return "/" + MX.command + " ml <index> <param> <value> (Params: lr, dr, rdr, wd, gc, ls, im, pm)";
+        return "/" + MX.command + " ml <index> <param> <value> (Params: lr, dr, rdr, wd, gc, ls, th, im, pm)";
     }
 
     @Override
@@ -97,6 +97,10 @@ public final class MLCommand extends MXSubCommand {
                 case "ls":
                     rnn.setLabelSmoothing(Double.parseDouble(value));
                     sender.sendMessage("§a[ML #" + index + "] labelSmoothing -> " + value);
+                    break;
+                case "th":
+                    rnn.setDecisionThreshold(Double.parseDouble(value));
+                    sender.sendMessage("§a[ML #" + index + "] decisionThreshold -> " + String.format("%.2f", rnn.getDecisionThreshold()));
                     break;
                 case "im":
                     rnn.setInputMode(InputMode.valueOf(value.toUpperCase()));
